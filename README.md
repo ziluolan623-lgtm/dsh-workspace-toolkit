@@ -69,15 +69,17 @@ get sessionIds() {
 ## 安装
 
 ```
-dsh plugin --profile <你的 profile 名> add dsh-workspace-toolkit@github:ziluolan623-lgtm/dsh-workspace-toolkit
+dsh plugin --profile <你的 profile 名> add dsh-workspace-toolkit@github:ziluolan623-lgtm/dsh-workspace-toolkit#v0.1.0
 ```
+
+（DSH Desktop 用户可省略 `--profile <名>`，自动使用 desktop profile。）
 
 或手动编辑 profile 的 `package.json`：
 
 ```jsonc
 {
   "dependencies": {
-    "dsh-workspace-toolkit": "github:ziluolan623-lgtm/dsh-workspace-toolkit"
+    "dsh-workspace-toolkit": "github:ziluolan623-lgtm/dsh-workspace-toolkit#v0.1.0"
   },
   "dsh": {
     "profile": {
