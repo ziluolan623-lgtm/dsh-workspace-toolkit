@@ -1,0 +1,51 @@
+{
+  "name": "dsh-workspace-toolkit",
+  "version": "0.1.0",
+  "description": "DSH 侧边栏与工作区实用工具集：底部动作按钮竖排修复、归档会话面板（取消归档 / 在文件夹中显示 / 移动到工作区）。DeepSeek Harness workspace/sidebar toolkit: footer-action column fix + an archived-sessions panel (unarchive / show in folder / move to workspace).",
+  "type": "module",
+  "main": "lib/index.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ziluolan623-lgtm/dsh-workspace-toolkit.git"
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "sidebar",
+    "workspace",
+    "archive"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ],
+      "platform": "web"
+    }
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "client",
+    "cordis.patch.yml",
+    "LICENSE",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
