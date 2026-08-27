@@ -169,9 +169,46 @@ window.__ModuleLoader__.load({
       }
     }
 
+    function DeleteConfirm({ session, colors, onConfirm, onCancel, busy }) {
+      const [input, setInput] = useState('')
+      const valid = input === 'DELETE'
+      return React.createElement('div', {
+        style: {
+          marginTop: '2px', padding: '8px 10px', borderRadius: '6px',
+          border: '1px solid ' + colors.danger, background: colors.hover,
+          display: 'flex', flexDirection: 'column', gap: '6px',
+        },
+      },
+        React.createElement('div', { style: { fontSize: '12px', color: colors.text, lineHeight: 1.5 } },
+          '永久删除归档会话「' + (session.title || '(无标题)') + '」？本地聊天记录将从磁盘移除且不可恢复。Mnemon 中已保存的记忆不会随之删除。'),
+        React.createElement('div', { style: { fontSize: '11px', color: colors.dimmer, wordBreak: 'break-all' } },
+          '会话 ID：' + session.sessionId),
+        React.createElement('input', {
+          type: 'text',
+          value: input,
+          placeholder: '输入 DELETE 以确认',
+          disabled: busy,
+          onChange: (e) => setInput(e.target.value),
+          style: {
+            background: colors.field, border: '1px solid ' + colors.border, color: colors.text,
+            borderRadius: '6px', padding: '5px 8px', fontSize: '12.5px', outline: 'none',
+          },
+        }),
+        React.createElement('div', { style: { display: 'flex', gap: '6px' } },
+          React.createElement('button', {
+            type: 'button', disabled: busy || !valid, onClick: onConfirm,
+            style: { ...menuButtonStyle(colors), color: '#ffffff', background: colors.danger, borderColor: colors.danger },
+          }, busy ? '处理中…' : '确认永久删除'),
+          React.createElement('button', {
+            type: 'button', disabled: busy, onClick: onCancel,
+            style: menuButtonStyle(colors),
+          }, '取消')))
+    }
+
     function ArchiveRow({ session, colors, onChanged }) {
       const [busy, setBusy] = useState(false)
       const [error, setError] = useState('')
+      const [confirmingDelete, setConfirmingDelete] = useState(false)
 
       const unarchive = useCallback(async () => {
         setBusy(true)
@@ -199,26 +236,12 @@ window.__ModuleLoader__.load({
       }, [session.sessionId])
 
       const permanentlyDelete = useCallback(async () => {
-        const label = session.title || '(无标题)'
-        const first = window.confirm(
-          `永久删除归档会话“${label}”？\n\n本地聊天记录将从磁盘移除且不可恢复。Mnemon 中已经保存的记忆不会随之删除。`,
-        )
-        if (!first) return
-        const confirmation = window.prompt(
-          `最后确认：请输入 DELETE\n\n会话 ID：${session.sessionId}`,
-          '',
-        )
-        if (confirmation === null) return
-        if (confirmation !== 'DELETE') {
-          setError('未输入 DELETE，已取消永久删除。')
-          return
-        }
         setBusy(true)
         setError('')
         try {
-          const result = await api.delete(session.sessionId, confirmation)
+          const result = await api.delete(session.sessionId, 'DELETE')
           if (result.warnings && result.warnings.length > 0) {
-            window.alert(`会话数据已删除，但有清理提示：\n${result.warnings.join('\n')}`)
+            setError('会话数据已删除，但有清理提示：\n' + result.warnings.join('\n'))
           }
           onChanged(session.sessionId)
         } catch (err) {
@@ -226,7 +249,7 @@ window.__ModuleLoader__.load({
         } finally {
           setBusy(false)
         }
-      }, [session.sessionId, session.title, onChanged])
+      }, [session.sessionId, onChanged])
 
       return React.createElement('div', {
         style: {
@@ -249,11 +272,16 @@ window.__ModuleLoader__.load({
           }, '在文件夹中显示'),
           React.createElement(MoveMenu, { session, colors, busy, setBusy, onMoved: onChanged, onError: setError }),
           React.createElement('button', {
-            type: 'button', disabled: busy, onClick: permanentlyDelete,
+            type: 'button', disabled: busy, onClick: () => setConfirmingDelete(true),
             style: { ...menuButtonStyle(colors), color: colors.danger, borderColor: colors.danger },
             title: '永久删除本地会话存档（不可恢复）',
-          }, busy ? '处理中…' : '永久删除')),
-        error && React.createElement('div', { style: { fontSize: '11.5px', color: colors.danger } }, error))
+          }, '永久删除')),
+        confirmingDelete && React.createElement(DeleteConfirm, {
+          session, colors, busy,
+          onConfirm: permanentlyDelete,
+          onCancel: () => setConfirmingDelete(false),
+        }),
+        error && React.createElement('div', { style: { fontSize: '11.5px', color: colors.danger, whiteSpace: 'pre-line' } }, error))
     }
 
     function ArchivePanel({ onClose }) {
