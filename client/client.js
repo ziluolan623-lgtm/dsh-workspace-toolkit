@@ -170,8 +170,6 @@ window.__ModuleLoader__.load({
     }
 
     function DeleteConfirm({ session, colors, onConfirm, onCancel, busy }) {
-      const [input, setInput] = useState('')
-      const valid = input === 'DELETE'
       return React.createElement('div', {
         style: {
           marginTop: '2px', padding: '8px 10px', borderRadius: '6px',
@@ -180,25 +178,14 @@ window.__ModuleLoader__.load({
         },
       },
         React.createElement('div', { style: { fontSize: '12px', color: colors.text, lineHeight: 1.5 } },
-          '永久删除归档会话「' + (session.title || '(无标题)') + '」？本地聊天记录将从磁盘移除且不可恢复。Mnemon 中已保存的记忆不会随之删除。'),
+          '确认永久删除归档会话「' + (session.title || '(无标题)') + '」？本地聊天记录将从磁盘移除且不可恢复。'),
         React.createElement('div', { style: { fontSize: '11px', color: colors.dimmer, wordBreak: 'break-all' } },
           '会话 ID：' + session.sessionId),
-        React.createElement('input', {
-          type: 'text',
-          value: input,
-          placeholder: '输入 DELETE 以确认',
-          disabled: busy,
-          onChange: (e) => setInput(e.target.value),
-          style: {
-            background: colors.field, border: '1px solid ' + colors.border, color: colors.text,
-            borderRadius: '6px', padding: '5px 8px', fontSize: '12.5px', outline: 'none',
-          },
-        }),
         React.createElement('div', { style: { display: 'flex', gap: '6px' } },
           React.createElement('button', {
-            type: 'button', disabled: busy || !valid, onClick: onConfirm,
+            type: 'button', disabled: busy, onClick: onConfirm,
             style: { ...menuButtonStyle(colors), color: '#ffffff', background: colors.danger, borderColor: colors.danger },
-          }, busy ? '处理中…' : '确认永久删除'),
+          }, busy ? '删除中…' : '确认永久删除'),
           React.createElement('button', {
             type: 'button', disabled: busy, onClick: onCancel,
             style: menuButtonStyle(colors),
