@@ -8,7 +8,7 @@
 //   1. 侧边栏底部动作区竖排修复 —— 纯 CSS 注入，无需服务、无需槎注册。
 //   2. 归档会话面板 —— 注册进 sidebar.footer.action（触发按钮）+
 //      shell.overlay（滑出面板），面板内列出归档会话，支持取消归档 / 在文件夹
-//      中显示 / 移动到工作区（后两者调用同源 /workspace-toolkit/* 路由）。
+//      中显示 / 移动到工作区 / 永久删除（调用同源 /workspace-toolkit/* 路由）。
 window.__ModuleLoader__.load({
   id: 'dsh-workspace-toolkit',
   factory: (require) => {
@@ -71,6 +71,9 @@ window.__ModuleLoader__.load({
       },
       moveTo(sessionId, workspaceId) {
         return postJson('/workspace-toolkit/archive/move-to', { sessionId, workspaceId })
+      },
+      delete(sessionId, confirmation) {
+        return postJson('/workspace-toolkit/archive/delete', { sessionId, confirmation })
       },
     }
 
@@ -195,6 +198,36 @@ window.__ModuleLoader__.load({
         }
       }, [session.sessionId])
 
+      const permanentlyDelete = useCallback(async () => {
+        const label = session.title || '(无标题)'
+        const first = window.confirm(
+          `永久删除归档会话“${label}”？\n\n本地聊天记录将从磁盘移除且不可恢复。Mnemon 中已经保存的记忆不会随之删除。`,
+        )
+        if (!first) return
+        const confirmation = window.prompt(
+          `最后确认：请输入 DELETE\n\n会话 ID：${session.sessionId}`,
+          '',
+        )
+        if (confirmation === null) return
+        if (confirmation !== 'DELETE') {
+          setError('未输入 DELETE，已取消永久删除。')
+          return
+        }
+        setBusy(true)
+        setError('')
+        try {
+          const result = await api.delete(session.sessionId, confirmation)
+          if (result.warnings && result.warnings.length > 0) {
+            window.alert(`会话数据已删除，但有清理提示：\n${result.warnings.join('\n')}`)
+          }
+          onChanged(session.sessionId)
+        } catch (err) {
+          setError(String((err && err.message) || err))
+        } finally {
+          setBusy(false)
+        }
+      }, [session.sessionId, session.title, onChanged])
+
       return React.createElement('div', {
         style: {
           padding: '10px 12px', borderBottom: '1px solid ' + colors.border,
@@ -214,7 +247,12 @@ window.__ModuleLoader__.load({
             type: 'button', disabled: busy, onClick: reveal,
             style: menuButtonStyle(colors),
           }, '在文件夹中显示'),
-          React.createElement(MoveMenu, { session, colors, busy, setBusy, onMoved: onChanged, onError: setError })),
+          React.createElement(MoveMenu, { session, colors, busy, setBusy, onMoved: onChanged, onError: setError }),
+          React.createElement('button', {
+            type: 'button', disabled: busy, onClick: permanentlyDelete,
+            style: { ...menuButtonStyle(colors), color: colors.danger, borderColor: colors.danger },
+            title: '永久删除本地会话存档（不可恢复）',
+          }, busy ? '处理中…' : '永久删除')),
         error && React.createElement('div', { style: { fontSize: '11.5px', color: colors.danger } }, error))
     }
 

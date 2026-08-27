@@ -1,7 +1,7 @@
 {
   "name": "dsh-workspace-toolkit",
-  "version": "0.1.0",
-  "description": "DSH 侧边栏与工作区实用工具集：底部动作按钮竖排修复、归档会话面板（取消归档 / 在文件夹中显示 / 移动到工作区）。DeepSeek Harness workspace/sidebar toolkit: footer-action column fix + an archived-sessions panel (unarchive / show in folder / move to workspace).",
+  "version": "0.2.0",
+  "description": "DSH 侧边栏与工作区实用工具集：底部动作按钮竖排修复、归档会话面板（取消归档 / 显示 / 移动 / 安全永久删除）。DeepSeek Harness workspace/sidebar toolkit with archived-session management and guarded permanent deletion.",
   "type": "module",
   "main": "lib/index.js",
   "license": "MIT",
@@ -47,5 +47,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
   }
 }
