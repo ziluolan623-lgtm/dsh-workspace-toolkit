@@ -15,11 +15,9 @@ DeepSeek Harness (DSH) 侧边栏 / 工作区实用工具插件。
 面板内每条会话可以做四件事：
 
 - **取消归档** —— 一键把会话从归档状态里摘出来，它会自动回到原来所属的工作区（如果原来没有工作区，就回到未分组列表）。
-- **在文件夹中显示** —— 直接拉起系统文件管理器并定位到该会话的存档文件（Windows 会高亮选中该文件，macOS 同理，Linux 因为没有统一的「选中文件」命令，会打开所在的父目录）。
-- **移动到工作区…** —— 取消归档并归入工作区。⚠️ 受 DSH 底层模型限制（会话只能属于它自身 cwd 对应的工作区），这个操作**实际只等效于取消归档**：下拉只会列出该会话所在目录对应的工作区（即它原来的工作区，通常 0 或 1 个），不存在"移到别的工作区"的可能。保留它是作为显式的撤销入口，详见下方设计取舍。
-- **永久删除** —— 只对已归档且当前未运行的会话开放。先弹出风险确认，再要求精确输入 `DELETE`；服务端再次校验归档状态、Agent 状态和磁盘路径后，才会删除该会话自己的存档目录并清理工作区登记。此操作不可恢复。
-
-**一个使用上要知道的限制**：「移动到工作区」实际只等效于取消归档——DSH 的工作区分组是按目录自动判定的，会话只能属于它自身目录对应的工作区，不支持把会话归入任意不相关的工作区（详见下方设计取舍）。
+- **在文件夹中显示** —— 直接拉起系统文件管理器并定位到该会话的存档文件，并在面板内回显该路径（Windows 会高亮选中该文件，macOS 同理，Linux 因为没有统一的「选中文件」命令，会打开所在的父目录）。
+- **注册为工作区** —— 把该会话自己的工作目录注册成一个工作区（已存在则复用），随后取消归档；会话之后归入这个工作区，不再散落在「未分组」。这是 DSH 模型下让会话获得工作区归属的唯一正确做法（分组按会话 header 的 cwd 决定）。
+- **永久删除** —— 只对已归档的会话开放。先弹出二次确认（无需输入确认串），服务端再次校验归档状态与磁盘路径后，才会删除该会话自己的存档目录、清理工作区登记，并通知前端把该会话从列表移除。此操作不可恢复。
 
 ## 功能与实现对照
 
@@ -28,8 +26,8 @@ DeepSeek Harness (DSH) 侧边栏 / 工作区实用工具插件。
 | 1 | 侧边栏底部动作按钮竖排修复 | 占位 effect（结构对称，无实际逻辑） | 注入 CSS：`[class*="footerActions"] { flex-direction: column }` |
 | 2 | 归档会话面板 | `GET /workspace-toolkit/archive/list` | `sidebar.footer.action` 触发按钮 + 面板 UI |
 | 3 | 取消归档 | `POST /workspace-toolkit/archive/unarchive` | 面板内「取消归档」按钮 |
-| 4 | 在文件夹中显示 | `POST /workspace-toolkit/archive/reveal`（拉起 `explorer.exe /select,` / `open -R`） | 面板内「在文件夹中显示」按钮 |
-| 5 | 移动到工作区 | `POST /workspace-toolkit/archive/eligible-moves` + `.../move-to` | 面板内「移动到工作区…」下拉 |
+| 4 | 在文件夹中显示 | `POST /workspace-toolkit/archive/reveal`（磁盘扫描定位 + `explorer.exe /select,`） | 面板内「在文件夹中显示」按钮 + 路径回显 |
+| 5 | 注册为工作区 | `POST /workspace-toolkit/archive/register-workspace` | 面板内「注册为工作区」按钮 |
 | 6 | 安全永久删除 | `POST /workspace-toolkit/archive/delete` | 二次确认 + 「永久删除」按钮 |
 
 功能 3–6 只作用于**归档面板内的会话**，不影响侧边栏其它任何位置——见下方设计取舍。
@@ -40,7 +38,7 @@ DeepSeek Harness (DSH) 侧边栏 / 工作区实用工具插件。
 
 `sidebar.workspaces` 是 `kind:"single"` 槎，被 `@deepseek-ai/dsh-client-ui-workspace`（约 2500 行）完全占用，且该组件没有任何内部扩展点（拖拽状态机、分组派生、目录流、重命名/删除对话框全部硬编码）。完整替换意味着重新实现整个组件。本插件改为在 `shell.overlay` 加一个独立的归档面板，功能上是原生 UI 的补充，不是替代。
 
-### 为什么"移动到工作区"只等效于取消归档
+### 为什么用「注册为工作区」代替「移动到工作区」
 
 DSH 的工作区分组是**按会话的 cwd 自动判定**的，不是自由拖拽的树状结构：
 
@@ -54,19 +52,24 @@ get sessionIds() {
 }
 ```
 
-会话的 cwd 在其创建时写入不可变的 SessionHeader，之后无法修改；`attachSession` 又强制要求 cwd 与工作区路径一致。因此一个会话**永远只能归入它自身 cwd 对应的工作区**——DSh 里不存在"把一个会话归入与它 cwd 无关的工作区"这个能力（官方 UI 同样没有）。归档会话的 cwd 对应的自然就是它原来的工作区，所以"移动到工作区…"可选的只有原工作区，实际操作等于取消归档。
+会话的 cwd 在其创建时写入不可变的 SessionHeader，之后无法修改；`attachSession` 又强制要求 cwd 与工作区路径一致。因此一个会话**永远只能归入它自身 cwd 对应的工作区**——DSH 里不存在"把一个会话归入与它 cwd 无关的工作区"这个能力（官方 UI 同样没有）。
 
-这个按钮保留下来是作为显式的撤销入口；真正有独立价值的是「取消归档」和「在文件夹中显示」。
+所以本插件**不再提供「移动到工作区」**（它只会列出一个"原工作区"，等价于取消归档，属于废功能），改为：
 
-### 为什么"取消归档"调用未公开内部方法
+- **取消归档** = 回到原来的工作区（若原来没有工作区，就回「未分组」）
+- **注册为工作区** = 把该会话自己的目录注册成工作区（已存在则复用），会话从此获得工作区归属、不再落在「未分组」
 
-`ctx.workspaceRegistry` 只公开了 `archiveSession()`，没有公开对应的取消归档方法。`archivedSessionIds` 是只读 getter。本插件里 `lib/archive-store.js` 的 `unarchiveSession()` 直接调用该服务实例上未在公共 API 里登记的 `requireState()` / `setState()` / `enqueueOperation()`，复刻 `archiveSession()` 自己的读-改-写模式。
+### 为什么"取消归档"优先用官方 API
 
-**风险**：`@deepseek-ai/dsh-workspace` 包升级时，这三个方法名/签名可能变化而不通知，届时取消归档会直接抛错（`archive-store.js` 顶部有存在性检查，报错会指向这份说明，不会静默写坏数据）。取消归档语义上只是把 sessionId 从 `archivedSessionIds` 数组里摘掉——源码注释确认"archiving 从不触碰工作区记账，取消归档会恢复原位"，所以这里没有更多状态要处理。
+新版 DSH（2026-10+）的 `ctx.workspaceRegistry` 已公开 `unarchiveSession(sessionId)`，本插件优先调用它。
 
-### 为什么"在文件夹中显示"只在归档面板生效
+旧版 DSH 没有该方法，此时回退到内部实现：直接调用服务实例上未公开的 `requireState()` / `setState()` / `enqueueOperation()`，复刻 `archiveSession()` 自己的读-改-写模式（同一队列、同一 storage domain）。
 
-出于同样的"收缩范围"考虑：`sessionPersistence.locate()` 只解析磁盘位置，`ctx.subprocess.spawn()` 拉起系统命令（Windows `explorer.exe /select,`，macOS `open -R`，Linux 退化为打开父目录）都是通用能力，但为了保持功能边界清晰、避免在原生会话列表里叠加菜单项，这个动作只出现在本插件自己的归档面板里。
+**风险**：旧版回退路径依赖未公开方法名，`@deepseek-ai/dsh-workspace` 升级可能变更；届时会直接抛错（有存在性检查与明确报错文案），不会静默写坏数据。取消归档语义上只是把 sessionId 从归档集合里摘掉——官方注释确认"archiving 从不触碰工作区记账，取消归档会恢复原位"。
+
+### 为什么"在文件夹中显示"走磁盘扫描
+
+新版 DSH 移除了 `sessionPersistence.locate()`，因此改为直接扫描 `<DSH_HOME>/sessions/<cwd>/<sessionId>/` 定位存档文件（支持 `session.jsonl` / `session.jsonl.zstd` / `session.v*.jsonl.zstd` 等版本化命名），再调用平台命令打开。面板会回显定位到的完整路径。
 
 ### 永久删除的安全边界
 

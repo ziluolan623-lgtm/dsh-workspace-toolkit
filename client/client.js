@@ -66,11 +66,8 @@ window.__ModuleLoader__.load({
       reveal(sessionId) {
         return postJson('/workspace-toolkit/archive/reveal', { sessionId })
       },
-      eligibleMoves(sessionId) {
-        return postJson('/workspace-toolkit/archive/eligible-moves', { sessionId })
-      },
-      moveTo(sessionId, workspaceId) {
-        return postJson('/workspace-toolkit/archive/move-to', { sessionId, workspaceId })
+      registerWorkspace(sessionId) {
+        return postJson('/workspace-toolkit/archive/register-workspace', { sessionId })
       },
       delete(sessionId, confirmation) {
         return postJson('/workspace-toolkit/archive/delete', { sessionId, confirmation })
@@ -104,68 +101,10 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function MoveMenu({ session, colors, onMoved, onError, busy, setBusy }) {
-      const [open, setOpen] = useState(false)
-      const [workspaces, setWorkspaces] = useState(null)
-
-      const openMenu = useCallback(async () => {
-        if (open) { setOpen(false); return }
-        setOpen(true)
-        try {
-          const res = await api.eligibleMoves(session.sessionId)
-          setWorkspaces(res.workspaces || [])
-        } catch (err) {
-          onError(String((err && err.message) || err))
-          setWorkspaces([])
-        }
-      }, [open, session.sessionId, onError])
-
-      const move = useCallback(async (workspaceId) => {
-        setBusy(true)
-        try {
-          await api.moveTo(session.sessionId, workspaceId)
-          setOpen(false)
-          onMoved(session.sessionId)
-        } catch (err) {
-          onError(String((err && err.message) || err))
-        } finally {
-          setBusy(false)
-        }
-      }, [session.sessionId, onMoved, onError, setBusy])
-
-      return React.createElement('div', { style: { position: 'relative', display: 'inline-block' } },
-        React.createElement('button', {
-          type: 'button', disabled: busy,
-          style: menuButtonStyle(colors),
-          onClick: openMenu,
-        }, '移动到工作区…'),
-        open && React.createElement('div', {
-          style: {
-            position: 'absolute', right: 0, top: '100%', marginTop: '4px',
-            background: colors.bg, border: '1px solid ' + colors.border, borderRadius: '6px',
-            boxShadow: '0 4px 16px rgba(0,0,0,.2)', zIndex: 10, minWidth: '200px',
-            maxHeight: '200px', overflowY: 'auto',
-          },
-        },
-          workspaces === null && React.createElement('div', { style: { padding: '8px 12px', fontSize: '12px', color: colors.dimmer } }, '加载中…'),
-          workspaces !== null && workspaces.length === 0 && React.createElement('div', { style: { padding: '8px 12px', fontSize: '12px', color: colors.dimmer } }, '没有 cwd 匹配的工作区'),
-          workspaces !== null && workspaces.map((w) => React.createElement('button', {
-            key: w.workspaceId, type: 'button', disabled: busy,
-            style: menuItemStyle(colors),
-            onClick: () => move(w.workspaceId),
-          }, w.title))))
-    }
-
     function menuButtonStyle(colors) {
       return {
         background: 'transparent', border: '1px solid ' + colors.border, color: colors.text,
         borderRadius: '6px', padding: '4px 10px', fontSize: '12px', cursor: 'pointer',
-      }
-    }
-    function menuItemStyle(colors) {
-      return {
-        display: 'block', width: '100%', textAlign: 'left', background: 'transparent',
-        border: 'none', color: colors.text, padding: '6px 12px', fontSize: '12.5px', cursor: 'pointer',
       }
     }
 
@@ -195,11 +134,13 @@ window.__ModuleLoader__.load({
     function ArchiveRow({ session, colors, onChanged }) {
       const [busy, setBusy] = useState(false)
       const [error, setError] = useState('')
+      const [info, setInfo] = useState('')
       const [confirmingDelete, setConfirmingDelete] = useState(false)
 
       const unarchive = useCallback(async () => {
         setBusy(true)
         setError('')
+        setInfo('')
         try {
           await api.unarchive(session.sessionId)
           onChanged(session.sessionId)
@@ -213,14 +154,36 @@ window.__ModuleLoader__.load({
       const reveal = useCallback(async () => {
         setBusy(true)
         setError('')
+        setInfo('')
         try {
-          await api.reveal(session.sessionId)
+          const result = await api.reveal(session.sessionId)
+          if (result && result.path) setInfo('已在文件夹中定位：' + result.path)
         } catch (err) {
           setError(String((err && err.message) || err))
         } finally {
           setBusy(false)
         }
       }, [session.sessionId])
+
+      // 把该会话自己的工作目录注册为工作区并取消归档：会话之后归入该工作区，
+      // 不再落在「未分组」里。已注册过的工作区由 Host 侧复用（幂等）。
+      const registerWorkspace = useCallback(async () => {
+        setBusy(true)
+        setError('')
+        setInfo('')
+        try {
+          const result = await api.registerWorkspace(session.sessionId)
+          const workspace = result && result.workspace
+          setInfo(workspace
+            ? `已注册工作区「${workspace.title}」：${workspace.path}`
+            : '已注册工作区')
+          onChanged(session.sessionId)
+        } catch (err) {
+          setError(String((err && err.message) || err))
+        } finally {
+          setBusy(false)
+        }
+      }, [session.sessionId, onChanged])
 
       const permanentlyDelete = useCallback(async () => {
         setBusy(true)
@@ -257,7 +220,11 @@ window.__ModuleLoader__.load({
             type: 'button', disabled: busy, onClick: reveal,
             style: menuButtonStyle(colors),
           }, '在文件夹中显示'),
-          React.createElement(MoveMenu, { session, colors, busy, setBusy, onMoved: onChanged, onError: setError }),
+          React.createElement('button', {
+            type: 'button', disabled: busy, onClick: registerWorkspace,
+            style: menuButtonStyle(colors),
+            title: '把该会话所在的目录注册为工作区，之后它就不会待在「未分组」',
+          }, '注册为工作区'),
           React.createElement('button', {
             type: 'button', disabled: busy, onClick: () => setConfirmingDelete(true),
             style: { ...menuButtonStyle(colors), color: colors.danger, borderColor: colors.danger },
@@ -268,6 +235,7 @@ window.__ModuleLoader__.load({
           onConfirm: permanentlyDelete,
           onCancel: () => setConfirmingDelete(false),
         }),
+        info && React.createElement('div', { style: { fontSize: '11.5px', color: colors.accent, wordBreak: 'break-all' } }, info),
         error && React.createElement('div', { style: { fontSize: '11.5px', color: colors.danger, whiteSpace: 'pre-line' } }, error))
     }
 
@@ -360,11 +328,11 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       try {
         ctx.effect(() => insertColumnFixStyle(), 'dsh-workspace-toolkit: column fix')
-        ctx.effect(() =>
+        ctx.slots.inject('sidebar.footer.action', () =>
           ctx.slots.register(
             { name: 'sidebar.footer.action', id: 'archive-panel', order: 20 },
             ArchivePanelButton,
-          ), 'dsh-workspace-toolkit: sidebar button')
+          ))
       } catch (error) {
         console.error('[dsh-workspace-toolkit] client apply failed:', error)
       }
