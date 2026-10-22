@@ -63,12 +63,6 @@ window.__ModuleLoader__.load({
       unarchive(sessionId) {
         return postJson('/workspace-toolkit/archive/unarchive', { sessionId })
       },
-      reveal(sessionId) {
-        return postJson('/workspace-toolkit/archive/reveal', { sessionId })
-      },
-      registerWorkspace(sessionId) {
-        return postJson('/workspace-toolkit/archive/register-workspace', { sessionId })
-      },
       delete(sessionId, confirmation) {
         return postJson('/workspace-toolkit/archive/delete', { sessionId, confirmation })
       },
@@ -134,49 +128,13 @@ window.__ModuleLoader__.load({
     function ArchiveRow({ session, colors, onChanged }) {
       const [busy, setBusy] = useState(false)
       const [error, setError] = useState('')
-      const [info, setInfo] = useState('')
       const [confirmingDelete, setConfirmingDelete] = useState(false)
 
       const unarchive = useCallback(async () => {
         setBusy(true)
         setError('')
-        setInfo('')
         try {
           await api.unarchive(session.sessionId)
-          onChanged(session.sessionId)
-        } catch (err) {
-          setError(String((err && err.message) || err))
-        } finally {
-          setBusy(false)
-        }
-      }, [session.sessionId, onChanged])
-
-      const reveal = useCallback(async () => {
-        setBusy(true)
-        setError('')
-        setInfo('')
-        try {
-          const result = await api.reveal(session.sessionId)
-          if (result && result.path) setInfo('已在文件夹中定位：' + result.path)
-        } catch (err) {
-          setError(String((err && err.message) || err))
-        } finally {
-          setBusy(false)
-        }
-      }, [session.sessionId])
-
-      // 把该会话自己的工作目录注册为工作区并取消归档：会话之后归入该工作区，
-      // 不再落在「未分组」里。已注册过的工作区由 Host 侧复用（幂等）。
-      const registerWorkspace = useCallback(async () => {
-        setBusy(true)
-        setError('')
-        setInfo('')
-        try {
-          const result = await api.registerWorkspace(session.sessionId)
-          const workspace = result && result.workspace
-          setInfo(workspace
-            ? `已注册工作区「${workspace.title}」：${workspace.path}`
-            : '已注册工作区')
           onChanged(session.sessionId)
         } catch (err) {
           setError(String((err && err.message) || err))
@@ -217,15 +175,6 @@ window.__ModuleLoader__.load({
             style: { ...menuButtonStyle(colors), color: colors.accent, borderColor: colors.accent },
           }, '取消归档'),
           React.createElement('button', {
-            type: 'button', disabled: busy, onClick: reveal,
-            style: menuButtonStyle(colors),
-          }, '在文件夹中显示'),
-          React.createElement('button', {
-            type: 'button', disabled: busy, onClick: registerWorkspace,
-            style: menuButtonStyle(colors),
-            title: '把该会话所在的目录注册为工作区，之后它就不会待在「未分组」',
-          }, '注册为工作区'),
-          React.createElement('button', {
             type: 'button', disabled: busy, onClick: () => setConfirmingDelete(true),
             style: { ...menuButtonStyle(colors), color: colors.danger, borderColor: colors.danger },
             title: '永久删除本地会话存档（不可恢复）',
@@ -235,7 +184,6 @@ window.__ModuleLoader__.load({
           onConfirm: permanentlyDelete,
           onCancel: () => setConfirmingDelete(false),
         }),
-        info && React.createElement('div', { style: { fontSize: '11.5px', color: colors.accent, wordBreak: 'break-all' } }, info),
         error && React.createElement('div', { style: { fontSize: '11.5px', color: colors.danger, whiteSpace: 'pre-line' } }, error))
     }
 
