@@ -60,7 +60,7 @@ test('deletes an inactive archived session and clears bookkeeping', async (t) =>
   t.after(() => rm(f.root, { recursive: true, force: true }))
   const archived = [f.sessionId]
   const detached = []
-  const cacheDeletes = []
+  const emitted = []
   const services = {
     dshHome: f.dshHome,
     workspaceRegistry: {
@@ -70,17 +70,11 @@ test('deletes an inactive archived session and clears bookkeeping', async (t) =>
       },
     },
     agents: { get() { return undefined } },
-    sessionPersistence: {
-      async list() { return [{ id: f.sessionId }] },
-      locate() { return { kind: 'jsonl', path: f.artifactPath } },
-    },
-    sessionProjectionCache: {
-      requireTable() {
-        return { async delete(id) { cacheDeletes.push(id) } }
-      },
-    },
     async unarchiveSession(_registry, id) {
       archived.splice(archived.indexOf(id), 1)
+    },
+    emitSessionRemoved(id) {
+      emitted.push(id)
     },
   }
 
@@ -89,23 +83,24 @@ test('deletes an inactive archived session and clears bookkeeping', async (t) =>
   assert.equal(result.bytesFreed, 37)
   assert.deepEqual(result.warnings, [])
   assert.deepEqual(detached, [f.sessionId])
-  assert.deepEqual(cacheDeletes, [f.sessionId])
+  assert.deepEqual(emitted, [f.sessionId])
   assert.deepEqual(archived, [])
   await assert.rejects(access(f.sessionDir))
 })
 
-test('refuses to delete an active session before touching persistence', async () => {
-  let listed = false
-  const sessionId = 'session-11111111-2222-4333-8444-555555555555'
-  await assert.rejects(
-    deleteArchivedSession({
-      workspaceRegistry: { archivedSessionIds: [sessionId] },
-      agents: { get() { return { id: sessionId } } },
-      sessionPersistence: { async list() { listed = true; return [] } },
-    }, sessionId, 'DELETE'),
-    (error) => error instanceof DeleteSessionError && error.status === 409,
-  )
-  assert.equal(listed, false)
+test('warns but proceeds when the session still has a live agent', async (t) => {
+  const f = await fixture()
+  t.after(() => rm(f.root, { recursive: true, force: true }))
+  const result = await deleteArchivedSession({
+    dshHome: f.dshHome,
+    workspaceRegistry: { archivedSessionIds: [f.sessionId], async list() { return [] } },
+    agents: { get() { return { id: f.sessionId } } },
+    unarchiveSession: async () => {},
+    emitSessionRemoved: () => {},
+  }, f.sessionId, 'DELETE')
+  assert.equal(result.deleted, true)
+  assert.ok(result.warnings.some((w) => w.includes('活跃 Agent')))
+  await assert.rejects(access(f.sessionDir))
 })
 
 test('requires exact DELETE confirmation and archived state', async () => {
